@@ -5,9 +5,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import uvicorn
 import numpy as np
-from sklearn.datasets import fetch_20newsgroups
 from fastapi.middleware.cors import CORSMiddleware
-
+from documents_data import documents
 app = FastAPI()
 
 # Add CORS middleware
@@ -19,9 +18,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-# Fetch the 20 Newsgroups dataset
-newsgroups = fetch_20newsgroups(subset='all')
-documents = newsgroups.data[:1000]  # Limit to 1000 documents for performance
+
 document_titles = [f"Document {i+1}" for i in range(len(documents))]
 
 # Initialize the TF-IDF Vectorizer
@@ -30,6 +27,7 @@ vectorizer = TfidfVectorizer(stop_words='english')
 # Fit and transform the documents
 tfidf_matrix = vectorizer.fit_transform(documents)
 
+# Pydantic models for the API responses
 class Document(BaseModel):
     id: str
     title: str
@@ -90,6 +88,17 @@ async def get_tfidf_matrix():
         "tfidf_sample": tfidf_sample.tolist()
     }
 
+@app.get("/all_documents")
+async def get_all_documents():
+    # Return a list of all document titles and their IDs
+    all_documents = []
+    for idx, document in enumerate(documents):
+        all_documents.append({
+            "id": f"doc{idx+1}",
+            "title": document_titles[idx],
+            "content": document,
+        })
+    return all_documents
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
