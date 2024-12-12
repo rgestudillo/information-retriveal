@@ -1,11 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.manifold import TSNE
-import uvicorn
+import math
 import numpy as np
+import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from documents_data import documents
 
@@ -23,10 +21,69 @@ app.add_middleware(
 # Store the original documents as default
 DEFAULT_DOCUMENTS = documents.copy()
 CURRENT_DOCUMENTS = documents.copy()
+VOCABULARY = {}
+TF_IDF_MATRIX = []
 
-# Initialize the TF-IDF Vectorizer globally but we'll update it when dataset changes
-vectorizer = TfidfVectorizer(stop_words='english')
-tfidf_matrix = vectorizer.fit_transform(CURRENT_DOCUMENTS)
+# Helper functions
+def tokenize(text):
+    return text.lower().split()
+
+def build_vocabulary(documents):
+    vocab = {}
+    for doc in documents:
+        for word in tokenize(doc):
+            if word not in vocab:
+                vocab[word] = len(vocab)
+    return vocab
+
+def calculate_tf(document, vocab):
+    tokens = tokenize(document)
+    tf = np.zeros(len(vocab))
+    for token in tokens:
+        if token in vocab:
+            tf[vocab[token]] += 1
+    return tf / len(tokens)
+
+def calculate_idf(documents, vocab):
+    doc_count = len(documents)
+    idf = np.zeros(len(vocab))
+    for token in vocab:
+        count = sum(1 for doc in documents if token in tokenize(doc))
+        idf[vocab[token]] = math.log(doc_count / (1 + count))
+    return idf
+
+def calculate_tf_idf(documents, vocab):
+    idf = calculate_idf(documents, vocab)
+    tf_idf_matrix = []
+    for document in documents:
+        tf = calculate_tf(document, vocab)
+        tf_idf_matrix.append(tf * idf)
+    return np.array(tf_idf_matrix)
+
+def cosine_similarity(vector1, vector2):
+    dot_product = np.dot(vector1, vector2)
+    magnitude1 = np.linalg.norm(vector1)
+    magnitude2 = np.linalg.norm(vector2)
+    if magnitude1 == 0 or magnitude2 == 0:
+        return 0.0
+    return dot_product / (magnitude1 * magnitude2)
+
+def reduce_to_3d(embeddings):
+    mean = np.mean(embeddings, axis=0)
+    centered = embeddings - mean
+    covariance = np.cov(centered.T)
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+    top_indices = np.argsort(eigenvalues)[::-1][:3]
+    top_vectors = eigenvectors[:, top_indices]
+    reduced = np.dot(centered, top_vectors)
+    return reduced
+
+def get_sample_tfidf_matrix(tfidf_matrix, num_rows=5, num_cols=10):
+    return tfidf_matrix[:num_rows, :num_cols]
+
+# Initialize Vocabulary and TF-IDF Matrix
+VOCABULARY = build_vocabulary(CURRENT_DOCUMENTS)
+TF_IDF_MATRIX = calculate_tf_idf(CURRENT_DOCUMENTS, VOCABULARY)
 
 class Query(BaseModel):
     query: str
@@ -46,147 +103,43 @@ class DocumentsUpdate(BaseModel):
 
 @app.post("/search")
 async def search(query: Query) -> Dict:
-    # Use current documents and vectorizer
-    query_vector = vectorizer.transform([query.query])
-    cosine_similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
-    
-    # Get all similarities for visualization
-    all_similarities = []
-    for idx, sim in enumerate(cosine_similarities):
-        all_similarities.append({
-            "id": f"doc{idx+1}",
-            "title": f"Document {idx+1}",
-            "similarity": float(sim),
-            "rank": len(cosine_similarities) - idx - 1 if sim > 0 else -1,
-            "is_top_5": False
-        })
+    # Query vector
+    query_vector = calculate_tf(query.query, VOCABULARY) * calculate_idf(CURRENT_DOCUMENTS, VOCABULARY)
+
+    # Cosine similarities
+    similarities = [cosine_similarity(query_vector, doc_vector) for doc_vector in TF_IDF_MATRIX]
 
     # Get top 5 results
-    top_indices = np.argsort(cosine_similarities)[::-1][:5]
-    
+    top_indices = np.argsort(similarities)[::-1][:5]
     results = []
     for idx in top_indices:
-        # Mark top 5 in all_similarities
-        doc_id = f"doc{idx+1}"
-        for sim in all_similarities:
-            if sim["id"] == doc_id:
-                sim["is_top_5"] = True
-                break
-                
-        results.append(Document(
-            id=f"doc{idx+1}",
-            title=f"Document {idx+1}",
-            content=CURRENT_DOCUMENTS[idx],
-            relevance_score=float(cosine_similarities[idx])
-        ))
-
-    # Get TF-IDF weights for the query
-    query_tfidf = vectorizer.transform([query.query])
-    feature_names = vectorizer.get_feature_names_out()
-    query_weights = []
-    for col in query_tfidf.nonzero()[1]:
-        query_weights.append(TfidfWeight(
-            term=feature_names[col],
-            weight=float(query_tfidf[0, col])
-        ))
-
-    return {
-        "results": results,
-        "query_weights": sorted(query_weights, key=lambda x: x.weight, reverse=True),
-        "all_similarities": all_similarities
-    }
-
-@app.get("/dataset_info")
-async def get_dataset_info():
-    return {
-        "num_documents": len(CURRENT_DOCUMENTS),
-        "num_features": len(vectorizer.get_feature_names_out()),
-        "sample_documents": CURRENT_DOCUMENTS[:5]
-    }
-
-@app.get("/tfidf_matrix")
-async def get_tfidf_matrix():
-    feature_names = vectorizer.get_feature_names_out()
-    tfidf_sample = tfidf_matrix[:5, :10].toarray()
-    return {
-        "feature_names": feature_names[:10].tolist(),
-        "tfidf_sample": tfidf_sample.tolist()
-    }
-
-@app.get("/all_documents")
-async def get_all_documents():
-    all_documents = []
-    for idx, document in enumerate(CURRENT_DOCUMENTS):
-        all_documents.append({
-            "id": f"doc{idx+1}",
-            "title": f"Document {idx+1}",
-            "content": document,
-        })
-    return all_documents
-
-@app.post("/update_dataset")
-async def update_dataset(data: DocumentsUpdate):
-    global CURRENT_DOCUMENTS, vectorizer, tfidf_matrix
-    
-    try:
-        # Update current documents
-        CURRENT_DOCUMENTS = data.documents
-        
-        # Reinitialize TF-IDF vectorizer with new documents
-        vectorizer = TfidfVectorizer(stop_words='english')
-        tfidf_matrix = vectorizer.fit_transform(CURRENT_DOCUMENTS)
-        
-        return {"message": "Dataset updated successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/reset_dataset")
-async def reset_dataset():
-    global CURRENT_DOCUMENTS, vectorizer, tfidf_matrix
-    
-    try:
-        # Reset to default documents
-        CURRENT_DOCUMENTS = DEFAULT_DOCUMENTS.copy()
-        
-        # Reinitialize TF-IDF vectorizer with default documents
-        vectorizer = TfidfVectorizer(stop_words='english')
-        tfidf_matrix = vectorizer.fit_transform(CURRENT_DOCUMENTS)
-        
-        return {"message": "Dataset reset successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.get("/document_embeddings")
-async def get_document_embeddings():
-    # Get TF-IDF embeddings
-    embeddings = tfidf_matrix.toarray()
-    
-    # Reduce dimensionality to 2D using t-SNE
-    tsne = TSNE(n_components=2, random_state=42)
-    embeddings_2d = tsne.fit_transform(embeddings)
-    
-    # Create response data
-    embedding_data = []
-    for idx, (x, y) in enumerate(embeddings_2d):
-        embedding_data.append({
+        results.append({
             "id": f"doc{idx+1}",
             "title": f"Document {idx+1}",
             "content": CURRENT_DOCUMENTS[idx],
-            "x": float(x),
-            "y": float(y)
+            "relevance_score": similarities[idx]
         })
-    
-    return embedding_data
+
+    # Query weights
+    query_weights = []
+    for idx, value in enumerate(query_vector):
+        if value > 0:
+            term = list(VOCABULARY.keys())[list(VOCABULARY.values()).index(idx)]
+            query_weights.append({
+                "term": term,
+                "weight": value
+            })
+
+    return {
+        "results": results,
+        "query_weights": query_weights
+    }
 
 @app.get("/document_embeddings_3d")
 async def get_document_embeddings_3d():
-    # Get TF-IDF embeddings
-    embeddings = tfidf_matrix.toarray()
-    
-    # Reduce dimensionality to 3D using t-SNE
-    tsne = TSNE(n_components=3, random_state=42)
-    embeddings_3d = tsne.fit_transform(embeddings)
-    
+    # Reduce dimensionality to 3D
+    embeddings_3d = reduce_to_3d(TF_IDF_MATRIX)
+
     # Create response data
     embedding_data = []
     for idx, (x, y, z) in enumerate(embeddings_3d):
@@ -198,62 +151,55 @@ async def get_document_embeddings_3d():
             "y": float(y),
             "z": float(z)
         })
-    
     return embedding_data
 
-@app.post("/search_with_process")
-async def search_with_process(query: Query):
+@app.get("/dataset_info")
+async def get_dataset_info():
+    return {
+        "num_documents": len(CURRENT_DOCUMENTS),
+        "num_features": len(VOCABULARY),
+        "sample_documents": CURRENT_DOCUMENTS[:5]
+    }
+
+@app.get("/tfidf_matrix")
+async def get_tfidf_matrix():
+    sample_tfidf = get_sample_tfidf_matrix(TF_IDF_MATRIX)
+    feature_names = list(VOCABULARY.keys())[:10]
+    return {
+        "feature_names": feature_names,
+        "tfidf_sample": sample_tfidf.tolist()
+    }
+
+@app.post("/update_dataset")
+async def update_dataset(data: DocumentsUpdate):
+    global CURRENT_DOCUMENTS, VOCABULARY, TF_IDF_MATRIX
     try:
-        # Transform query using the same vectorizer
-        query_vector = vectorizer.transform([query.text]).toarray()[0]
-        
-        # Calculate similarities with all documents
-        similarities = cosine_similarity([query_vector], tfidf_matrix)[0]
-        
-        # Get all documents with their similarities
-        all_results = [
-            {
-                "id": f"doc{idx+1}",
-                "title": f"Document {idx+1}",
-                "content": doc,
-                "relevance_score": float(score)
-            }
-            for idx, (doc, score) in enumerate(zip(CURRENT_DOCUMENTS, similarities))
-        ]
-        
-        # Sort by similarity score
-        all_results.sort(key=lambda x: x['relevance_score'], reverse=True)
-        
-        # Return top 5 and process information
-        return {
-            "top_results": all_results[:5],
-            "all_scores": all_results,
-            "query_vector": query_vector.tolist(),
-            "process_steps": [
-                {
-                    "step": 1,
-                    "description": "Query Vectorization",
-                    "details": "Converting query to TF-IDF vector"
-                },
-                {
-                    "step": 2,
-                    "description": "Similarity Calculation",
-                    "details": "Computing cosine similarity with all documents"
-                },
-                {
-                    "step": 3,
-                    "description": "Ranking",
-                    "details": "Sorting documents by similarity score"
-                },
-                {
-                    "step": 4,
-                    "description": "Results Selection",
-                    "details": "Selecting top 5 most similar documents"
-                }
-            ]
-        }
+        # Update the current documents
+        CURRENT_DOCUMENTS = data.documents
+
+        # Recalculate the vocabulary and TF-IDF matrix
+        VOCABULARY = build_vocabulary(CURRENT_DOCUMENTS)
+        TF_IDF_MATRIX = calculate_tf_idf(CURRENT_DOCUMENTS, VOCABULARY)
+
+        return {"message": "Dataset updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/reset_dataset")
+async def reset_dataset():
+    global CURRENT_DOCUMENTS, VOCABULARY, TF_IDF_MATRIX
+    try:
+        # Reset to default documents
+        CURRENT_DOCUMENTS = DEFAULT_DOCUMENTS.copy()
+
+        # Recalculate the vocabulary and TF-IDF matrix
+        VOCABULARY = build_vocabulary(CURRENT_DOCUMENTS)
+        TF_IDF_MATRIX = calculate_tf_idf(CURRENT_DOCUMENTS, VOCABULARY)
+
+        return {"message": "Dataset reset successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

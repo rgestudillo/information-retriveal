@@ -9,13 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import DatasetInfo from './DatasetInfo'
 import TfidfMatrix from './TfidfMatrix'
 import SearchResults from './SearchResults'
-import DocumentGraph from './DocumentGraph'
-import { Loader2, Search, Info, Database, Network } from 'lucide-react'
+import { Loader2, Search, Info, Database, Network, Play } from 'lucide-react'
 import DatasetManager from './DatasetManager'
-import EmbeddingVisualization from './EmbeddingVisualization'
 import EmbeddingVisualization3D from './EmbeddingVisualization3D'
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
 
 interface Document {
   id: string
@@ -36,13 +32,10 @@ export default function IRVisualization() {
   const [datasetInfo, setDatasetInfo] = useState<any>(null)
   const [tfidfMatrix, setTfidfMatrix] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [allDocuments, setAllDocuments] = useState<Document[]>([])
-  const [is3D, setIs3D] = useState(false)
 
   useEffect(() => {
     fetchDatasetInfo()
     fetchTfidfMatrix()
-    fetchAllDocuments()
   }, [])
 
   const fetchDatasetInfo = async () => {
@@ -55,12 +48,6 @@ export default function IRVisualization() {
     const response = await fetch('http://localhost:8000/tfidf_matrix')
     const data = await response.json()
     setTfidfMatrix(data)
-  }
-
-  const fetchAllDocuments = async () => {
-    const response = await fetch('http://localhost:8000/all_documents')
-    const data = await response.json()
-    setAllDocuments(data)
   }
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -86,7 +73,6 @@ export default function IRVisualization() {
     // Refresh all data after dataset update
     fetchDatasetInfo()
     fetchTfidfMatrix()
-    fetchAllDocuments()
     setResults([])
     setQueryWeights([])
   }
@@ -96,7 +82,7 @@ export default function IRVisualization() {
       {/* Header Section */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Information Retrieval Visualization</h1>
-        <p className="text-gray-600">Explore document relationships and search results using TF-IDF and cosine similarity</p>
+        <p className="text-gray-600">Explore document relationships and search results in 3D space</p>
       </div>
 
       {/* Search Section */}
@@ -137,7 +123,7 @@ export default function IRVisualization() {
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="visualization">
             <Network className="mr-2 h-4 w-4" />
-            Document Graph
+            3D Embeddings
           </TabsTrigger>
           <TabsTrigger value="results">
             <Search className="mr-2 h-4 w-4" />
@@ -154,24 +140,9 @@ export default function IRVisualization() {
         </TabsList>
 
         <TabsContent value="visualization" className="space-y-4">
-          <div className="flex items-center justify-end space-x-2 mb-4">
-            <Label htmlFor="3d-mode">3D Mode</Label>
-            <Switch
-              id="3d-mode"
-              checked={is3D}
-              onCheckedChange={setIs3D}
-            />
-          </div>
-
-          {is3D ? (
-            <EmbeddingVisualization3D searchResults={results} />
-          ) : (
-            <EmbeddingVisualization searchResults={results} />
-          )}
-
-          <DocumentGraph
-            documents={allDocuments}
-            topResults={results}
+          <EmbeddingVisualization3D
+            searchResults={results}
+            query={query}
           />
 
           {queryWeights.length > 0 && (
