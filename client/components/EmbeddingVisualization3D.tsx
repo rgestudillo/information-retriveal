@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as d3 from 'd3'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
-import { Loader2, Maximize2 } from 'lucide-react'
-import * as d3 from 'd3'
+import { Loader2, Maximize2, Play } from 'lucide-react'
+import { Slider } from './ui/slider'
 
 interface EmbeddingPoint {
     id: string
@@ -14,7 +15,7 @@ interface EmbeddingPoint {
     content: string
     x: number
     y: number
-    z: number  // We'll need this from backend
+    z: number
 }
 
 interface SearchResult {
@@ -30,10 +31,18 @@ interface EmbeddingVisualization3DProps {
 
 export default function EmbeddingVisualization3D({ searchResults = [] }: EmbeddingVisualization3DProps) {
     const containerRef = useRef<HTMLDivElement>(null)
+    const sceneRef = useRef<{
+        scene: THREE.Scene
+        camera: THREE.PerspectiveCamera
+        renderer: THREE.WebGLRenderer
+        controls: OrbitControls
+    } | null>(null)
     const [embeddings, setEmbeddings] = useState<EmbeddingPoint[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [hoveredDoc, setHoveredDoc] = useState<EmbeddingPoint | null>(null)
     const [isFullscreen, setIsFullscreen] = useState(false)
+    const [isAnimating, setIsAnimating] = useState(false)
+    const [animationSpeed, setAnimationSpeed] = useState(1)
 
     useEffect(() => {
         fetchEmbeddings()
@@ -83,6 +92,9 @@ export default function EmbeddingVisualization3D({ searchResults = [] }: Embeddi
         // Controls
         const controls = new OrbitControls(camera, renderer.domElement)
         controls.enableDamping = true
+
+        // Store scene reference
+        sceneRef.current = { scene, camera, renderer, controls }
 
         // Lights
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
@@ -184,9 +196,18 @@ export default function EmbeddingVisualization3D({ searchResults = [] }: Embeddi
         }
         animate()
 
+        // Window resize handler
+        const handleResize = () => {
+            if (!containerRef.current) return
+            camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight
+            camera.updateProjectionMatrix()
+            renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight)
+        }
+        window.addEventListener('resize', handleResize)
+
         // Cleanup
         return () => {
-            renderer.domElement.removeEventListener('mousemove', onMouseMove)
+            window.removeEventListener('resize', handleResize)
             renderer.dispose()
         }
     }
@@ -195,12 +216,150 @@ export default function EmbeddingVisualization3D({ searchResults = [] }: Embeddi
         setIsFullscreen(!isFullscreen)
     }
 
+    const animateSearchTraversal = () => {
+        if (!sceneRef.current || searchResults.length === 0) return
+        setIsAnimating(true)
+
+        const { scene } = sceneRef.current
+        const duration = 1000 / animationSpeed // milliseconds per step
+
+        // Reset all materials
+        scene.traverse((object) => {
+            if (object instanceof THREE.Mesh) {
+                const material = object.material as THREE.MeshPhongMaterial
+                material.color.set(0x1f77b4)
+                material.opacity = 0.6
+            }
+            if (object instanceof THREE.Line) {
+                object.visible = false
+            }
+        })
+
+        // Animate each result sequentially
+        searchResults.forEach((result, index) => {
+            setTimeout(() => {
+                // Find the corresponding mesh
+                scene.traverse((object) => {
+                    if (object instanceof THREE.Mesh && object.userData.id === result.id) {
+                        const material = object.material as THREE.MeshPhongMaterial
+
+                        // Pulse animation
+                        const startScale = object.scale.x
+                        const pulseAnimation = new THREE.AnimationMixer(object)
+                        const track = new THREE.VectorKeyframeTrack(
+                            '.scale',
+                            [0, 0.5, 1],
+                            [
+                                startScale, startScale, startScale,
+                                startScale * 1.5, startScale * 1.5, startScale * 1.5,
+                                startScale, startScale, startScale
+                            ]
+                        )
+                        const clip = new THREE.AnimationClip('pulse', 1, [track])
+                        const action = pulseAnimation.clipAction(clip)
+                        action.setLoop(THREE.LoopOnce, 1)
+                        action.play()
+
+                        // Update material
+                        material.color.set(0xff4444)
+                        material.opacity = 1
+
+                        // Show connection to previous result
+                        if (index > 0) {
+                            const prevResult = searchResults[index - 1]
+                            scene.traverse((prevObject) => {
+                                if (prevObject instanceof THREE.Mesh && prevObject.userData.id === prevResult.id) {
+                                    const line = new THREE.Line(
+                                        new THREE.BufferGeometry().setFromPoints([
+                                            object.position,
+                                            prevObject.position
+                                        ]),
+                                        new THREE.LineBasicMaterial({
+                                            color: 0xff4444,
+                                            opacity: 0.5,
+                                            transparent: true
+                                        })
+                                    )
+                                    scene.add(line)
+                                }
+                            })
+                        }
+                    }
+                })
+
+                // Add floating score label
+                const resultMesh = scene.children.find(
+                    (child) => child instanceof THREE.Mesh && child.userData.id === result.id
+                ) as THREE.Mesh
+                if (resultMesh) {
+                    const score = result.relevance_score.toFixed(3)
+                    const sprite = new THREE.Sprite(
+                        new THREE.SpriteMaterial({
+                            map: createTextTexture(`#${index + 1} (${score})`),
+                            sizeAttenuation: false
+                        })
+                    )
+                    sprite.position.copy(resultMesh.position)
+                    sprite.position.y += 0.2
+                    sprite.scale.set(0.1, 0.1, 1)
+                    scene.add(sprite)
+                }
+
+            }, index * duration)
+        })
+
+        // Reset animation state
+        setTimeout(() => {
+            setIsAnimating(false)
+        }, searchResults.length * duration)
+    }
+
+    const createTextTexture = (text: string) => {
+        const canvas = document.createElement('canvas')
+        const context = canvas.getContext('2d')!
+        canvas.width = 256
+        canvas.height = 64
+
+        context.fillStyle = '#ffffff'
+        context.fillRect(0, 0, canvas.width, canvas.height)
+
+        context.font = '24px Arial'
+        context.fillStyle = '#ff4444'
+        context.textAlign = 'center'
+        context.textBaseline = 'middle'
+        context.fillText(text, canvas.width / 2, canvas.height / 2)
+
+        const texture = new THREE.CanvasTexture(canvas)
+        texture.needsUpdate = true
+        return texture
+    }
+
     return (
         <Card className={isFullscreen ? 'fixed inset-4 z-50' : ''}>
             <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                     <span>3D Document Embeddings Visualization</span>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-500">Animation Speed</span>
+                            <Slider
+                                className="w-32"
+                                min={0.5}
+                                max={2}
+                                step={0.1}
+                                value={[animationSpeed]}
+                                onValueChange={([value]) => setAnimationSpeed(value)}
+                            />
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={animateSearchTraversal}
+                            disabled={isAnimating || searchResults.length === 0}
+                        >
+                            <Play className="h-4 w-4 mr-2" />
+                            Animate Results
+                        </Button>
                         <Button
                             variant="outline"
                             size="sm"

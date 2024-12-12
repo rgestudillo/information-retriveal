@@ -201,5 +201,59 @@ async def get_document_embeddings_3d():
     
     return embedding_data
 
+@app.post("/search_with_process")
+async def search_with_process(query: Query):
+    try:
+        # Transform query using the same vectorizer
+        query_vector = vectorizer.transform([query.text]).toarray()[0]
+        
+        # Calculate similarities with all documents
+        similarities = cosine_similarity([query_vector], tfidf_matrix)[0]
+        
+        # Get all documents with their similarities
+        all_results = [
+            {
+                "id": f"doc{idx+1}",
+                "title": f"Document {idx+1}",
+                "content": doc,
+                "relevance_score": float(score)
+            }
+            for idx, (doc, score) in enumerate(zip(CURRENT_DOCUMENTS, similarities))
+        ]
+        
+        # Sort by similarity score
+        all_results.sort(key=lambda x: x['relevance_score'], reverse=True)
+        
+        # Return top 5 and process information
+        return {
+            "top_results": all_results[:5],
+            "all_scores": all_results,
+            "query_vector": query_vector.tolist(),
+            "process_steps": [
+                {
+                    "step": 1,
+                    "description": "Query Vectorization",
+                    "details": "Converting query to TF-IDF vector"
+                },
+                {
+                    "step": 2,
+                    "description": "Similarity Calculation",
+                    "details": "Computing cosine similarity with all documents"
+                },
+                {
+                    "step": 3,
+                    "description": "Ranking",
+                    "details": "Sorting documents by similarity score"
+                },
+                {
+                    "step": 4,
+                    "description": "Results Selection",
+                    "details": "Selecting top 5 most similar documents"
+                }
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
