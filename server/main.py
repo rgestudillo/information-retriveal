@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import List, Dict
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.manifold import TSNE
 import uvicorn
 import numpy as np
 from fastapi.middleware.cors import CORSMiddleware
@@ -154,6 +155,51 @@ async def reset_dataset():
         return {"message": "Dataset reset successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/document_embeddings")
+async def get_document_embeddings():
+    # Get TF-IDF embeddings
+    embeddings = tfidf_matrix.toarray()
+    
+    # Reduce dimensionality to 2D using t-SNE
+    tsne = TSNE(n_components=2, random_state=42)
+    embeddings_2d = tsne.fit_transform(embeddings)
+    
+    # Create response data
+    embedding_data = []
+    for idx, (x, y) in enumerate(embeddings_2d):
+        embedding_data.append({
+            "id": f"doc{idx+1}",
+            "title": f"Document {idx+1}",
+            "content": CURRENT_DOCUMENTS[idx],
+            "x": float(x),
+            "y": float(y)
+        })
+    
+    return embedding_data
+
+@app.get("/document_embeddings_3d")
+async def get_document_embeddings_3d():
+    # Get TF-IDF embeddings
+    embeddings = tfidf_matrix.toarray()
+    
+    # Reduce dimensionality to 3D using t-SNE
+    tsne = TSNE(n_components=3, random_state=42)
+    embeddings_3d = tsne.fit_transform(embeddings)
+    
+    # Create response data
+    embedding_data = []
+    for idx, (x, y, z) in enumerate(embeddings_3d):
+        embedding_data.append({
+            "id": f"doc{idx+1}",
+            "title": f"Document {idx+1}",
+            "content": CURRENT_DOCUMENTS[idx],
+            "x": float(x),
+            "y": float(y),
+            "z": float(z)
+        })
+    
+    return embedding_data
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

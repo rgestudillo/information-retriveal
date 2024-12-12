@@ -12,6 +12,10 @@ import SearchResults from './SearchResults'
 import DocumentGraph from './DocumentGraph'
 import { Loader2, Search, Info, Database, Network } from 'lucide-react'
 import DatasetManager from './DatasetManager'
+import EmbeddingVisualization from './EmbeddingVisualization'
+import EmbeddingVisualization3D from './EmbeddingVisualization3D'
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 
 interface Document {
   id: string
@@ -33,6 +37,7 @@ export default function IRVisualization() {
   const [tfidfMatrix, setTfidfMatrix] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [allDocuments, setAllDocuments] = useState<Document[]>([])
+  const [is3D, setIs3D] = useState(false)
 
   useEffect(() => {
     fetchDatasetInfo()
@@ -149,17 +154,25 @@ export default function IRVisualization() {
         </TabsList>
 
         <TabsContent value="visualization" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Network className="mr-2 h-5 w-5" />
-                Document Relationship Graph
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DocumentGraph documents={allDocuments} topResults={results} />
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-end space-x-2 mb-4">
+            <Label htmlFor="3d-mode">3D Mode</Label>
+            <Switch
+              id="3d-mode"
+              checked={is3D}
+              onCheckedChange={setIs3D}
+            />
+          </div>
+
+          {is3D ? (
+            <EmbeddingVisualization3D searchResults={results} />
+          ) : (
+            <EmbeddingVisualization searchResults={results} />
+          )}
+
+          <DocumentGraph
+            documents={allDocuments}
+            topResults={results}
+          />
 
           {queryWeights.length > 0 && (
             <Card>
