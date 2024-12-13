@@ -6,7 +6,7 @@ export default function Footer() {
                     <div className="space-y-3">
                         <h3 className="font-semibold">About</h3>
                         <p className="text-sm text-gray-500">
-                            A project for CMSC 137 demonstrating information retrieval concepts
+                            A project for NLP demonstrating information retrieval concepts
                             using TF-IDF and cosine similarity.
                         </p>
                     </div>
@@ -29,12 +29,12 @@ export default function Footer() {
                         <ul className="space-y-2 text-sm text-gray-500">
                             <li>University of the Philippines</li>
                             <li>Department of Computer Science</li>
-                            <li>CMSC 137 - Information Retrieval</li>
+                            <li>CMSC 178 - Natural Langauge Processin</li>
                         </ul>
                     </div>
                 </div>
                 <div className="mt-8 pt-8 border-t text-center text-sm text-gray-500">
-                    <p>© {new Date().getFullYear()} CMSC 137 Project. All rights reserved.</p>
+                    <p>© {new Date().getFullYear()} CMSC 178 Project. All rights reserved.</p>
                 </div>
             </div>
         </footer>

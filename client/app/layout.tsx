@@ -16,7 +16,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "CMSC 137 - Information Retrieval Project",
+  title: "CMSC 178 - Natural Langauge Processing",
   description: "A project demonstrating information retrieval concepts using TF-IDF and cosine similarity",
 };
 

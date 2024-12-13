@@ -11,7 +11,7 @@ export default function Header() {
                 <div className="flex items-center space-x-4">
                     <Link href="/" className="hover:opacity-80 transition-opacity">
                         <h1 className="text-2xl font-bold font-mono cursor-pointer">
-                            CMSC 137 PROJECT
+                            NLP PROJECT
                         </h1>
                     </Link>
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
