@@ -9,9 +9,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import DatasetInfo from './DatasetInfo'
 import TfidfMatrix from './TfidfMatrix'
 import SearchResults from './SearchResults'
-import { Loader2, Search, Info, Database, Network, Play } from 'lucide-react'
+import { Loader2, Search, Info, Database, Network, Play, MessageSquare } from 'lucide-react'
 import DatasetManager from './DatasetManager'
 import EmbeddingVisualization3D from './EmbeddingVisualization3D'
+import RAGTab from './RAGTab'
 
 interface Document {
   id: string
@@ -120,7 +121,7 @@ export default function IRVisualization() {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="visualization" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="visualization">
             <Network className="mr-2 h-4 w-4" />
             3D Embeddings
@@ -128,6 +129,10 @@ export default function IRVisualization() {
           <TabsTrigger value="results">
             <Search className="mr-2 h-4 w-4" />
             Search Results
+          </TabsTrigger>
+          <TabsTrigger value="rag">
+            <MessageSquare className="mr-2 h-4 w-4" />
+            AI Assistant
           </TabsTrigger>
           <TabsTrigger value="details">
             <Info className="mr-2 h-4 w-4" />
@@ -170,6 +175,10 @@ export default function IRVisualization() {
 
         <TabsContent value="results">
           <SearchResults results={results} />
+        </TabsContent>
+
+        <TabsContent value="rag">
+          <RAGTab searchResults={results} />
         </TabsContent>
 
         <TabsContent value="details" className="space-y-4">
