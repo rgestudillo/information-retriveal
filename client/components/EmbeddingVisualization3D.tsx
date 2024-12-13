@@ -132,9 +132,10 @@ export default function EmbeddingVisualization3D({ searchResults = [] }: Embeddi
                 yScale(point.y),
                 zScale(point.z)
             )
-            sphere.userData = point
+            sphere.userData = point as EmbeddingPoint; // Ensure typing here
             points.add(sphere)
         })
+
 
         // Add connections between search results
         if (searchResults.length > 0) {
@@ -177,13 +178,14 @@ export default function EmbeddingVisualization3D({ searchResults = [] }: Embeddi
 
             raycaster.setFromCamera(mouse, camera)
             const intersects = raycaster.intersectObjects(points.children.filter(obj => obj instanceof THREE.Mesh))
-
             if (intersects.length > 0) {
-                const point = intersects[0].object as THREE.Mesh
-                setHoveredDoc(point.userData)
+                const intersectedMesh = intersects[0].object as THREE.Mesh
+                const hoveredData = intersectedMesh.userData as EmbeddingPoint; // Explicit cast
+                setHoveredDoc(hoveredData)
             } else {
                 setHoveredDoc(null)
             }
+
         }
 
         renderer.domElement.addEventListener('mousemove', onMouseMove)

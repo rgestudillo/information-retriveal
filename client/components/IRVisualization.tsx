@@ -147,7 +147,6 @@ export default function IRVisualization() {
         <TabsContent value="visualization" className="space-y-4">
           <EmbeddingVisualization3D
             searchResults={results}
-            query={query}
           />
 
           {queryWeights.length > 0 && (
