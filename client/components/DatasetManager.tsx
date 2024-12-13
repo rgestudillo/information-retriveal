@@ -68,7 +68,7 @@ export default function DatasetManager({ onDatasetUpdate }: DatasetManagerProps)
                 throw new Error('Please add at least one document')
             }
 
-            const response = await fetch('http://localhost:8000/update_dataset', {
+            const response = await fetch('https://information-retriveal-2nf3.vercel.app/update_dataset', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -96,7 +96,7 @@ export default function DatasetManager({ onDatasetUpdate }: DatasetManagerProps)
         setSuccess(null)
 
         try {
-            const response = await fetch('http://localhost:8000/reset_dataset', {
+            const response = await fetch('https://information-retriveal-2nf3.vercel.app/reset_dataset', {
                 method: 'POST',
             })
 

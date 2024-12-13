@@ -40,13 +40,13 @@ export default function IRVisualization() {
   }, [])
 
   const fetchDatasetInfo = async () => {
-    const response = await fetch('http://localhost:8000/dataset_info')
+    const response = await fetch('https://information-retriveal-2nf3.vercel.app/dataset_info')
     const data = await response.json()
     setDatasetInfo(data)
   }
 
   const fetchTfidfMatrix = async () => {
-    const response = await fetch('http://localhost:8000/tfidf_matrix')
+    const response = await fetch('https://information-retriveal-2nf3.vercel.app/tfidf_matrix')
     const data = await response.json()
     setTfidfMatrix(data)
   }
@@ -55,7 +55,7 @@ export default function IRVisualization() {
     e.preventDefault()
     setIsLoading(true)
     try {
-      const response = await fetch('http://localhost:8000/search', {
+      const response = await fetch('https://information-retriveal-2nf3.vercel.app/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query })

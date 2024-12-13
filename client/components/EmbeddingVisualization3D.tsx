@@ -57,7 +57,7 @@ export default function EmbeddingVisualization3D({ searchResults = [] }: Embeddi
     const fetchEmbeddings = async () => {
         setIsLoading(true)
         try {
-            const response = await fetch('http://localhost:8000/document_embeddings_3d')
+            const response = await fetch('https://information-retriveal-2nf3.vercel.app/document_embeddings_3d')
             const data = await response.json()
             setEmbeddings(data)
         } catch (error) {
